@@ -12,7 +12,9 @@
 - 已使用项目独立虚拟环境 `.venv`，避免课程依赖污染系统 Python。
 - 已检查 `requirements.txt` 中的主要依赖。
 - 已确认 JupyterLab 可以通过项目虚拟环境运行。
+- 已注册并在 VS Code 中选择 `Python (quant-for-beginners)` Notebook 内核。
 - 已成功导入 `numpy`、`pandas`、`matplotlib`、`seaborn`、`yfinance`、`akshare` 和 `scikit-learn`。
+- 已修复 8 个课程 Notebook 在 macOS 上的中文字体兼容问题。
 
 ## 3. 运行结果
 
@@ -31,9 +33,12 @@ imports-ok
 
 ## 4. 踩坑与学习记录
 
-直接调用系统 `python3` 时，版本是 Python 3.9.6，而且没有安装 Jupyter。这说明“电脑上有 Python”并不代表当前终端使用的是课程项目的 Python。后续运行课程内容前，需要先激活 `.venv`，或者明确使用 `.venv/bin/python` 和 `.venv/bin/jupyter`。
+排障过程中先后解决了两个问题：
 
-这次配置让我理解到，虚拟环境的作用不仅是隔离依赖，也能让同一台电脑上的不同项目使用不同的 Python 和软件包版本，减少版本冲突。
+- 系统 `python3` 仍为低于课程要求的 3.9.6，VS Code 最初选择的另一套 Python 3.11 又缺少 `ipykernel` 和课程依赖，导致 Notebook 无法运行。最终在项目中创建 `.venv`、安装完整依赖、注册专用内核，并切换到 `Python (quant-for-beginners)`。
+- 环境就绪后，Matplotlib 因 Notebook 写死 Windows 字体 `SimHei` 而无法正常显示中文。随后为全部 8 个 Notebook 增加 `Heiti SC`、`PingFang SC` 等跨平台字体回退，并验证中文图表不再出现缺字警告。
+
+这次经历让我认识到，Notebook 能否运行不仅取决于是否安装 Python，还取决于 VS Code 选择的解释器、Jupyter Kernel、项目依赖和系统字体是否彼此匹配。后续运行课程前应先激活 `.venv`，并确认 Notebook 使用项目专用内核。
 
 ## 5. 还没完全懂的问题
 
