@@ -57,6 +57,59 @@ $$
 
 ## 4. 运行结果与学习记录
 
+### 4.1 运行代码
+
+```python
+import warnings
+
+import matplotlib.pyplot as plt
+import yfinance as yf
+from IPython.display import display
+
+warnings.filterwarnings('ignore')
+plt.rcParams['font.sans-serif'] = [
+    'Heiti SC', 'PingFang SC', 'Microsoft YaHei', 'SimHei',
+    'Noto Sans CJK SC', 'WenQuanYi Micro Hei', 'DejaVu Sans',
+]
+plt.rcParams['axes.unicode_minus'] = False
+
+# 下载 TSLA 最近 6 个月的日线行情
+tsla = yf.download(
+    'TSLA', period='6mo', progress=False, multi_level_index=False
+)
+
+print('🎉 恭喜！你已经拿到真实股票数据')
+print(f'   共 {len(tsla)} 个交易日')
+print(f'   最新收盘价: ${tsla["Close"].iloc[-1]:.2f}')
+display(tsla.tail(5))
+
+# 上图绘制收盘价，下图绘制成交量
+fig, axes = plt.subplots(
+    2, 1, figsize=(12, 6), sharex=True,
+    gridspec_kw={'height_ratios': [3, 1]},
+)
+axes[0].plot(
+    tsla.index, tsla['Close'], color='tab:blue', linewidth=1.5
+)
+axes[0].set_title('真实数据 · 特斯拉 TSLA 收盘价', fontsize=14)
+axes[0].set_ylabel('美元')
+axes[0].grid(True, alpha=0.3)
+
+axes[1].bar(
+    tsla.index, tsla['Volume'], width=0.8, color='gray', alpha=0.5
+)
+axes[1].set_ylabel('成交量')
+axes[1].set_xlabel('日期')
+axes[1].grid(True, alpha=0.3)
+
+plt.tight_layout()
+plt.show()
+```
+
+### 4.2 运行输出
+
+以下是 2026-07-14 完成笔记时保存的运行结果。代码使用滚动时间参数 `period='6mo'`，未来重新运行时，交易日数量、最新价格和图表会随行情更新。
+
 ```text
 标的：TSLA
 区间：最近 6 个月
@@ -66,6 +119,8 @@ $$
 ```
 
 ![TSLA 近 6 个月收盘价与成交量](../assets/task02/tsla-price-volume.png)
+
+### 4.3 学习记录
 
 仓位实验也让我看到：即使胜率提高到 52%，下注比例仍会显著改变长期结果。按约 4% 的比例控制仓位时，实验结果明显好于无优势组；一次投入 25% 则可能因连续亏损快速耗尽资金。因此，量化交易不仅要寻找可验证的概率优势，还需要合理的仓位管理和长期纪律。
 

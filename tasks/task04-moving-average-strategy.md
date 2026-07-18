@@ -55,6 +55,117 @@ $$
 
 ## 4. 运行结果与学习记录
 
+### 4.1 运行代码
+
+```python
+import warnings
+
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+import yfinance as yf
+
+warnings.filterwarnings('ignore')
+plt.rcParams['font.sans-serif'] = [
+    'Heiti SC', 'PingFang SC', 'Microsoft YaHei', 'SimHei',
+    'Noto Sans CJK SC', 'WenQuanYi Micro Hei', 'DejaVu Sans',
+]
+plt.rcParams['axes.unicode_minus'] = False
+
+# 下载 TSLA 近 2 年行情
+challenge_ticker = 'TSLA'
+challenge_period = '2y'
+tsla_raw = yf.download(
+    challenge_ticker, period=challenge_period, progress=False,
+    multi_level_index=False,
+).dropna()
+tsla_ma = tsla_raw[['Close']].copy()
+
+# 计算两组移动平均线并统计金叉、死叉
+ma_pairs = [(5, 20), (10, 30)]
+signal_summary = {}
+
+for short_window, long_window in ma_pairs:
+    short_col = f'MA{short_window}'
+    long_col = f'MA{long_window}'
+    cross_col = f'cross_{short_window}_{long_window}'
+
+    tsla_ma[short_col] = tsla_ma['Close'].rolling(short_window).mean()
+    tsla_ma[long_col] = tsla_ma['Close'].rolling(long_window).mean()
+    spread = tsla_ma[short_col] - tsla_ma[long_col]
+    tsla_ma[cross_col] = np.sign(spread).diff()
+
+    valid = tsla_ma.dropna(subset=[short_col, long_col])
+    golden = valid[valid[cross_col] > 0]
+    death = valid[valid[cross_col] < 0]
+    signal_summary[f'MA{short_window}/MA{long_window}'] = {
+        'golden': len(golden),
+        'death': len(death),
+        'total': len(golden) + len(death),
+    }
+
+print(f'{challenge_ticker} 共 {len(tsla_ma)} 个交易日')
+for name, stats in signal_summary.items():
+    print(
+        f"{name}: 金叉 {stats['golden']} 次，死叉 {stats['death']} 次，"
+        f"合计 {stats['total']} 次"
+    )
+
+# 绘制两组参数的均线与交叉信号
+fig, axes = plt.subplots(2, 1, figsize=(14, 11), sharex=True)
+
+for ax, (short_window, long_window) in zip(axes, ma_pairs):
+    short_col = f'MA{short_window}'
+    long_col = f'MA{long_window}'
+    cross_col = f'cross_{short_window}_{long_window}'
+    valid = tsla_ma.dropna(subset=[short_col, long_col])
+    golden = valid[valid[cross_col] > 0]
+    death = valid[valid[cross_col] < 0]
+
+    ax.plot(
+        tsla_ma.index, tsla_ma['Close'], color='gray',
+        alpha=0.45, linewidth=1, label='收盘价',
+    )
+    ax.plot(
+        tsla_ma.index, tsla_ma[short_col], color='tab:orange',
+        linewidth=1.6, label=short_col,
+    )
+    ax.plot(
+        tsla_ma.index, tsla_ma[long_col], color='tab:blue',
+        linewidth=2, label=long_col,
+    )
+    ax.scatter(
+        golden.index, golden['Close'], marker='^', s=95,
+        color='limegreen', edgecolors='darkgreen', zorder=5,
+        label='金叉 ▲',
+    )
+    ax.scatter(
+        death.index, death['Close'], marker='v', s=95,
+        color='salmon', edgecolors='darkred', zorder=5,
+        label='死叉 ▼',
+    )
+    stats = signal_summary[f'MA{short_window}/MA{long_window}']
+    ax.set_title(
+        f"TSLA {short_col}/{long_col}：金叉 {stats['golden']} 次，"
+        f"死叉 {stats['death']} 次"
+    )
+    ax.set_ylabel('价格（美元）')
+    ax.legend(loc='upper left', ncol=4)
+    ax.grid(True, alpha=0.3)
+
+axes[-1].set_xlabel('日期')
+fig.suptitle(
+    'Task4 挑战：TSLA 双均线金叉 / 死叉参数对比',
+    fontsize=15, y=1.01,
+)
+plt.tight_layout()
+plt.show()
+```
+
+### 4.2 运行输出
+
+以下是 2026-07-18 完成笔记时保存的运行结果。代码使用滚动时间参数 `period='2y'`，未来重新运行时，交易日数量和交叉次数会随样本窗口更新。
+
 ```text
 TSLA：501 个交易日
 MA5/MA20：金叉 14 次，死叉 14 次，合计 28 次
@@ -62,6 +173,8 @@ MA10/MA30：金叉 10 次，死叉 10 次，合计 20 次
 ```
 
 ![TSLA 双均线金叉与死叉参数对比](../assets/task04/tsla-ma-crossover-comparison.png)
+
+### 4.3 学习记录
 
 MA10/MA30 比 MA5/MA20 少产生 8 次交叉信号。较长周期的均线更加平滑，能够过滤一部分短期波动，但确认趋势的速度也更慢。
 

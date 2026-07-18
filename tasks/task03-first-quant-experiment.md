@@ -55,6 +55,115 @@ $$
 
 ## 4. 运行结果与学习记录
 
+### 4.1 运行代码
+
+```python
+import warnings
+
+import matplotlib.pyplot as plt
+import pandas as pd
+import yfinance as yf
+
+warnings.filterwarnings('ignore')
+plt.rcParams['font.sans-serif'] = [
+    'Heiti SC', 'PingFang SC', 'Microsoft YaHei', 'SimHei',
+    'Noto Sans CJK SC', 'WenQuanYi Micro Hei', 'DejaVu Sans',
+]
+plt.rcParams['axes.unicode_minus'] = False
+
+# 下载三只股票近 1 年行情并计算日收益率
+challenge_tickers = {
+    'MU': '美光科技',
+    'TSLA': '特斯拉',
+    'NVDA': '英伟达',
+}
+challenge_rets = {}
+
+for symbol, name in challenge_tickers.items():
+    data = yf.download(
+        symbol, period='1y', progress=False, multi_level_index=False
+    ).dropna()
+    challenge_rets[name] = data['Close'].pct_change().dropna()
+    print(f'{name} ({symbol}): {len(challenge_rets[name])} 个交易日')
+
+# 使用日收益率标准差比较波动大小
+challenge_vol = pd.Series({
+    name: returns.std() for name, returns in challenge_rets.items()
+}).sort_values(ascending=False)
+
+print('\n=== 日收益率波动（标准差，越大越猛）===')
+for name, value in challenge_vol.items():
+    print(f'  {name}: {value:.3%}')
+print(f'\n波动最大的是：{challenge_vol.index[0]}')
+
+# 图一：三只股票的日收益率 Histogram
+challenge_colors = ['tab:purple', 'tab:orange', 'tab:green']
+fig, axes = plt.subplots(1, 3, figsize=(15, 4), sharey=True)
+
+for ax, (name, returns), color in zip(
+    axes, challenge_rets.items(), challenge_colors
+):
+    ax.hist(
+        returns.values, bins=35, color=color,
+        alpha=0.75, edgecolor='white',
+    )
+    ax.axvline(0, color='black', linestyle='--', linewidth=0.7)
+    ax.axvline(
+        returns.mean(), color='red', linewidth=1.2,
+        label=f'平均值 {returns.mean():.2%}',
+    )
+    ax.set_title(f'{name}\nσ = {returns.std():.2%}')
+    ax.set_xlabel('日收益率')
+    ax.legend(fontsize=9)
+    ax.grid(True, axis='y', alpha=0.25)
+
+axes[0].set_ylabel('天数')
+fig.suptitle(
+    '挑战任务：MU、TSLA、NVDA 日收益率 Histogram 对比',
+    fontsize=14, y=1.03,
+)
+plt.tight_layout()
+plt.show()
+
+# 图二：日收益率时间变化与标准差柱状图
+challenge_color_map = dict(zip(challenge_rets.keys(), challenge_colors))
+fig, axes = plt.subplots(1, 2, figsize=(14, 5))
+
+for name, returns in challenge_rets.items():
+    axes[0].plot(
+        returns.index, returns.values,
+        color=challenge_color_map[name], linewidth=0.9,
+        alpha=0.85, label=name,
+    )
+axes[0].axhline(0, color='black', linestyle='--', linewidth=0.7)
+axes[0].set_title('日收益率对比', fontsize=13)
+axes[0].set_xlabel('日期')
+axes[0].set_ylabel('日收益率')
+axes[0].legend()
+axes[0].grid(True, alpha=0.3)
+
+bar_colors = [challenge_color_map[name] for name in challenge_vol.index]
+bars = axes[1].bar(
+    challenge_vol.index, challenge_vol.values * 100,
+    color=bar_colors, edgecolor='white',
+)
+axes[1].set_title('波动大小对比（标准差 %）', fontsize=13)
+axes[1].set_ylabel('标准差 (%)')
+axes[1].grid(True, axis='y', alpha=0.3)
+for bar, value in zip(bars, challenge_vol.values):
+    axes[1].text(
+        bar.get_x() + bar.get_width() / 2, bar.get_height(),
+        f'{value:.2%}', ha='center', va='bottom', fontsize=10,
+    )
+
+plt.tight_layout()
+plt.show()
+```
+
+### 4.2 运行输出
+
+以下是 2026-07-16 完成笔记时保存的运行结果。代码使用滚动时间参数 `period='1y'`，未来重新运行时，交易日数量和波动率会随样本窗口更新。
+
 ```text
 美光科技（MU）：250 个交易日，日收益率标准差 4.831%
 特斯拉（TSLA）：250 个交易日，日收益率标准差 2.816%
@@ -64,9 +173,11 @@ $$
 
 ![MU、TSLA、NVDA 日收益率 Histogram 对比](../assets/task03/mu-tsla-nvda-return-histogram.png)
 
-Histogram 显示，大部分日收益率集中在零附近，但三只股票都存在较长尾部。美光科技的分布范围最宽，说明它在样本期内不仅日常波动更大，出现极端单日涨跌的幅度也更明显。
-
 ![MU、TSLA、NVDA 日收益率与波动率对比](../assets/task03/mu-tsla-nvda-return-volatility-comparison.png)
+
+### 4.3 学习记录
+
+Histogram 显示，大部分日收益率集中在零附近，但三只股票都存在较长尾部。美光科技的分布范围最宽，说明它在样本期内不仅日常波动更大，出现极端单日涨跌的幅度也更明显。
 
 日收益率折线保留了波动发生的时间信息，可以看出三只股票的收益率大多围绕零上下变化，同时也能定位少数明显的极端涨跌日。右侧柱状图按标准差从高到低排列，直观显示美光科技（MU）波动最大，为 4.831%；其次是特斯拉（TSLA），为 2.816%；英伟达（NVDA）为 2.265%。
 
