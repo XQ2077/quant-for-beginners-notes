@@ -53,6 +53,79 @@ $$
 
 均线由收盘价计算，今天收盘后才知道今天的完整信号，因此回测通常使用 `signal.shift(1)`，让信号从下一交易日生效，避免未来函数。金叉也不保证盈利：均线具有滞后性，震荡行情可能产生连续假信号；频繁换仓还会累积手续费和滑点。必须通过回测比较收益、回撤、交易次数和不同市场阶段的表现。
 
+### 3.7 关键函数与双均线算法
+
+#### 函数与方法速查
+
+| 函数或方法 | 关键参数 | 返回值 | 本 Task 中的用途 |
+| --- | --- | --- | --- |
+| `Series.rolling()` | 窗口 `window`、最少样本数 `min_periods` | 延迟计算的 `Rolling` 对象 | 定义最近 5、10、20 或 30 个交易日的滑动窗口 |
+| `Rolling.mean()` | 通常无额外参数 | 与原索引对齐的移动平均 `Series` | 把窗口内收盘价求均值得到短、长周期均线 |
+| `np.sign()` | 数值数组或 `Series` | 负数映射为 -1，0 保持 0，正数映射为 1 | 把均线价差压缩为短均线位于长均线上方或下方的状态 |
+| `Series.diff()` | `periods`，默认与前一行比较 | 相邻差分 `Series` | 检测符号或持仓状态是否发生改变 |
+| `DataFrame.dropna(subset=...)` | `subset` 指定必须非空的列 | 清理后的新 `DataFrame` | 排除长均线窗口尚未形成时的前置空值 |
+| 布尔索引 `df[condition]` | 与行索引对齐的布尔条件 | 满足条件的行 | 提取金叉、死叉对应日期和价格 |
+| `Series.astype(int)` | 目标数据类型 | 转换类型后的 `Series` | 把 `True/False` 持仓条件转换为 `1/0` 信号 |
+| `Series.shift(1)` | 位移期数，正数向后移动 | 索引不变、数值后移的 `Series` | 让收盘后得到的信号从下一交易日生效 |
+
+`rolling(20).mean()` 默认要求窗口中有 20 个有效值，因此前 19 行是 `NaN`。这些空值表示“历史长度不足”，不能填成价格或信号 0 后直接参与交叉统计，否则可能产生人为的首次交易。
+
+#### 双均线信号算法
+
+1. 下载 TSLA 收盘价，为每组参数分别计算短周期和长周期移动平均线。
+2. 先删除两条均线尚未同时形成的行，再计算价差 $spread_t=MA_{short}(t)-MA_{long}(t)$。
+3. 将价差转换为状态：短均线在长均线上方记为 1，否则记为 0。
+4. 对状态调用 `diff()`：从 0 变为 1 得到 `+1`，对应金叉；从 1 变为 0 得到 `-1`，对应死叉。
+5. 对每组参数统计交叉次数并绘制价格、两条均线和买卖标记。
+6. 真正回测时对持仓状态调用 `shift(1)`，再乘以下一交易日收益，并扣除手续费和滑点。
+
+#### `np.sign()` 与布尔状态的差异
+
+当前实验使用 `np.sign(spread).diff()`：状态包含 -1、0、1。如果价差恰好等于 0，路径可能先从 -1 变到 0，再从 0 变到 1，两次差分都为正，存在把“触碰”和“真正穿越”分别计数的可能。
+
+使用 `(spread > 0).astype(int).diff()` 时，价差小于或等于 0 都属于空仓状态，只有从“不在上方”变为“在上方”才记录金叉。它更适合直接生成 0/1 持仓信号，但仍应先删除均线前置 `NaN`，以免第一条有效记录被误判为状态变化。
+
+#### 复杂度与边界情况
+
+对长度为 $n$ 的价格序列，pandas 的滚动均值、差值和状态检测都可以在线性时间内完成，每组参数的时间复杂度为 $O(n)$。比较 $p$ 组均线时，总时间复杂度为 $O(pn)$；如果为每组参数保存两条均线和交叉列，额外空间复杂度也是 $O(pn)$。
+
+- 长周期越大，前置 `NaN` 越多，可用于统计的有效区间越短。
+- 均线使用历史价格，信号天然滞后；参数更短只能提高灵敏度，不能消除滞后。
+- 震荡行情可能频繁产生交叉，信号次数增加后，手续费和滑点会更明显。
+- 未使用 `shift(1)` 就让当天收盘信号获得当天收益，会构成未来函数。
+- 参数在同一段历史数据上反复优化容易过拟合，需要保留样本外区间验证。
+
+#### 最小示例
+
+```python
+import numpy as np
+import yfinance as yf
+
+raw = yf.download(
+    'TSLA', period='2y', progress=False, multi_level_index=False
+).dropna()
+if raw.empty:
+    raise RuntimeError('未获取到 TSLA 行情')
+
+ma = raw[['Close']].copy()
+ma['MA5'] = ma['Close'].rolling(window=5, min_periods=5).mean()
+ma['MA20'] = ma['Close'].rolling(window=20, min_periods=20).mean()
+valid = ma.dropna(subset=['MA5', 'MA20']).copy()
+
+spread = valid['MA5'] - valid['MA20']
+sign_cross = np.sign(spread).diff()          # 当前实验的识别方式
+state = (spread > 0).astype(int)
+state_cross = state.diff()                   # 直接识别 0/1 状态变化
+
+golden = valid[state_cross == 1]
+death = valid[state_cross == -1]
+next_day_position = state.shift(1).fillna(0)
+
+print('金叉：', len(golden), '死叉：', len(death))
+print('下一交易日持仓信号：')
+print(next_day_position.tail())
+```
+
 ## 4. 运行结果与学习记录
 
 ### 4.1 运行代码

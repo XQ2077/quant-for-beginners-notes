@@ -39,6 +39,69 @@ JupyterLab 负责提供 Notebook 编辑界面并把代码发送给 Kernel 执行
 
 Matplotlib 字体属于系统资源，不会因为安装 Python 包而自动具备。只指定 Windows 常见的 `SimHei`，在 macOS 上可能出现字体缺失；配置 `Heiti SC`、`PingFang SC` 等候选字体并保留跨平台回退，可以让同一 Notebook 在不同系统上正常显示中文。
 
+### 3.5 关键函数、命令与环境诊断算法
+
+#### 函数与接口速查
+
+| 函数或接口 | 关键参数 | 返回值 | 本 Task 中的用途 |
+| --- | --- | --- | --- |
+| `sys.executable` | 无；这是只读属性 | 当前进程使用的 Python 可执行文件绝对路径 | 判断 Notebook 或脚本究竟运行在哪个解释器中 |
+| `importlib.util.find_spec(name)` | `name` 是导入模块名，如 `sklearn` | 找到时返回 `ModuleSpec`，找不到时返回 `None` | 在不真正导入模块的情况下检查当前环境能否定位依赖 |
+| `importlib.metadata.version(name)` | `name` 是安装分发名，如 `scikit-learn` | 已安装版本字符串；未安装时抛出 `PackageNotFoundError` | 检查当前虚拟环境里的包版本 |
+| `module.__version__` | 无；模块可能不提供该属性 | 模块声明的版本字符串 | 导入成功后快速查看 `jupyterlab`、`numpy` 等版本 |
+| `plt.rcParams[key]` | Matplotlib 配置项名称 | 读取时返回当前配置，赋值时修改后续图表的全局默认值 | 设置中文字体候选列表和负号显示方式 |
+| `python -m module` | `module` 是当前解释器环境中的模块 | 启动该模块的命令行入口 | 确保 `jupyter`、`pip` 等工具来自指定 Python 环境 |
+
+分发名和导入名不一定相同。例如安装与查询版本时使用 `scikit-learn`，代码导入和 `find_spec()` 检查时使用 `sklearn`。如果混用这两个名称，可能出现“包明明安装了却查询不到”的误判。
+
+#### 环境诊断流程
+
+1. 用 `sys.executable` 或 `.venv/bin/python` 确认解释器路径，避免先在错误环境里反复安装包。
+2. 检查 Python 版本是否满足课程要求，再用 `version()` 或导入测试核对依赖。
+3. 在 Notebook 中再次打印 `sys.executable`，确认 Kernel 与终端使用同一个 `.venv`。
+4. 运行最小绘图测试；依赖正常但中文缺字时，再检查 `plt.rcParams` 和系统字体。
+5. 每修复一层就重新验证，不同时改动解释器、Kernel、依赖和字体，以免无法判断问题来源。
+
+#### 复杂度与边界情况
+
+假设要检查 $m$ 个依赖、模块搜索路径有 $p$ 个位置，逐个调用 `find_spec()` 的查找成本可近似写为 $O(mp)$；实际环境规模很小时，主要耗时通常来自磁盘访问和真正导入大型包。版本查询只读取已安装包的元数据，通常比完整导入更快。
+
+- 终端激活 `.venv` 不会自动改变已经启动的 Notebook Kernel。
+- `find_spec()` 能找到模块只说明“可以定位”，不保证导入时不会因二进制库或子依赖问题失败。
+- 并非所有第三方模块都有 `__version__`，更通用的做法是用 `importlib.metadata.version()`。
+- 字体名称存在平台差异，应提供候选列表；候选字体全部不存在时，Matplotlib 仍会回退并可能出现缺字警告。
+
+#### 最小示例
+
+```python
+import sys
+from importlib.metadata import PackageNotFoundError, version
+from importlib.util import find_spec
+
+import matplotlib.pyplot as plt
+
+packages = {
+    'numpy': 'numpy',
+    'pandas': 'pandas',
+    'scikit-learn': 'sklearn',
+}
+
+print('解释器：', sys.executable)
+for distribution_name, import_name in packages.items():
+    spec = find_spec(import_name)
+    try:
+        installed_version = version(distribution_name)
+    except PackageNotFoundError:
+        installed_version = '未安装'
+    print(import_name, '可定位：', spec is not None, '版本：', installed_version)
+
+plt.rcParams['font.sans-serif'] = [
+    'Heiti SC', 'PingFang SC', 'Microsoft YaHei', 'SimHei',
+    'DejaVu Sans',
+]
+plt.rcParams['axes.unicode_minus'] = False
+```
+
 ## 4. 运行结果与学习记录
 
 ### 4.1 运行代码

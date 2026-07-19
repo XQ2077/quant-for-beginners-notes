@@ -53,6 +53,67 @@ $$
 
 标准差会同时把上涨和下跌偏离视为波动，无法直接区分“有利波动”和亏损风险；一个数值也会隐藏收益率分布是否偏斜、是否存在极端长尾。Histogram 尾巴较长，意味着少数交易日可能出现远离平均水平的大涨或大跌。因此，后续还需要结合滚动波动率、分位数、下行波动率和最大回撤理解风险。
 
+### 3.7 关键函数与波动比较算法
+
+#### 函数与方法速查
+
+| 函数或方法 | 关键参数 | 返回值 | 本 Task 中的用途 |
+| --- | --- | --- | --- |
+| `Series.pct_change()` | `periods` 指比较间隔，默认 1 | 与原序列等长的收益率 `Series` | 计算相邻交易日收盘价的简单收益率 |
+| `Series.dropna()` | 可使用 `subset`、`how` 等参数；默认返回新对象 | 删除缺失值后的 `Series` 或 `DataFrame` | 去除 `pct_change()` 产生的首行 `NaN` 和无效行情 |
+| `Series.std(ddof=1)` | `ddof` 是自由度修正，默认 1 | 浮点数 | 计算日收益率的样本标准差 |
+| `pd.Series(mapping)` | 字典、列表或数组，可指定 `dtype`、`name` | 一维带索引数据 | 把股票名称到波动率的映射变成可排序序列 |
+| `Series.sort_values()` | `ascending=False` 表示降序 | 排序后的新 `Series` | 把波动最大的股票排在最前面 |
+| `Axes.hist()` | 数据、箱数 `bins`、颜色和透明度 | 计数、箱边界和图形对象 | 观察收益率分布中心、离散程度和长尾 |
+| `Axes.plot()` | 日期索引、收益率、颜色和线宽 | `Line2D` 对象列表 | 保留波动发生的时间位置，识别异常日期和波动聚集 |
+
+`pct_change()` 计算的是相对变化，不是“百分点差”。例如价格从 100 上涨到 103，对应收益率为 $(103/100)-1=3\%$。第一行没有前一期价格，因此必然是 `NaN`；这是一条没有定义的收益率，而不是 0 收益。
+
+#### 多股票波动比较流程
+
+1. 为 MU、TSLA、NVDA 使用相同的 `period='1y'` 下载日线，确保比较窗口口径一致。
+2. 选取每只股票的 `Close`，调用 `pct_change()` 转换到可横向比较的日收益率尺度。
+3. 用 `dropna()` 清除首行和无效数据；如需严格逐日对齐，应再对三只股票取共同日期交集。
+4. 对每条收益率序列调用 `std(ddof=1)`，得到样本日波动率。
+5. 把结果放入 `pd.Series` 并降序排列，确定波动率排名。
+6. 同时绘制 Histogram 与时间折线：前者看分布形状和尾部，后者看波动发生的时间及聚集现象。
+
+#### 复杂度与边界情况
+
+假设有 $k$ 只股票，每只包含约 $n$ 个交易日。收益率计算、缺失值清理、标准差和绘图都需要遍历数据，主要时间复杂度为 $O(kn)$，保存全部收益率的空间复杂度为 $O(kn)$；对 $k$ 个标准差排序的复杂度为 $O(k\log k)$。通常 $n$ 远大于 $k$，因此时间主要花在数据下载和逐行统计上。
+
+- `std()` 默认使用 `ddof=1` 计算样本标准差；若使用 `ddof=0`，得到的是总体标准差，数值会略小。
+- 极端单日收益会显著放大标准差，不能仅凭一个数值判断风险是否稳定。
+- 相同的 `period` 不一定保证每条序列日期完全一致；停牌、缺失值或交易日差异会改变样本数。
+- 股票拆分和分红会影响价格序列，比较前需要明确 `yfinance` 当前版本的复权设置，并在所有标的上使用相同口径。
+- Histogram 的形状会受到 `bins` 数量影响；箱数过少会隐藏细节，过多会放大样本噪声。
+
+#### 最小示例
+
+```python
+import pandas as pd
+import yfinance as yf
+
+tickers = {'MU': '美光科技', 'TSLA': '特斯拉', 'NVDA': '英伟达'}
+returns_by_name = {}
+
+for symbol, name in tickers.items():
+    data = yf.download(
+        symbol, period='1y', progress=False, multi_level_index=False
+    ).dropna()
+    if data.empty:
+        raise RuntimeError(f'未获取到 {symbol} 行情')
+    returns_by_name[name] = data['Close'].pct_change().dropna()
+
+volatility = pd.Series({
+    name: returns.std(ddof=1)
+    for name, returns in returns_by_name.items()
+}).sort_values(ascending=False)
+
+print(volatility.apply(lambda value: f'{value:.3%}'))
+print('波动最大：', volatility.index[0])
+```
+
 ## 4. 运行结果与学习记录
 
 ### 4.1 运行代码
