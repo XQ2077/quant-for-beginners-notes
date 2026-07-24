@@ -51,8 +51,8 @@ $$
 个股相对市场的 Beta 定义为：
 
 $$
-\beta_i=\frac{\operatorname{Cov}(r_i,r_m)}
-{\operatorname{Var}(r_m)}
+\beta_i=\frac{\mathrm{Cov}(r_i,r_m)}
+{\mathrm{Var}(r_m)}
 $$
 
 - $\beta\approx1$：历史涨跌敏感度与市场接近。
