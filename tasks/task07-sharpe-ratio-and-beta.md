@@ -1,6 +1,6 @@
 # Quant-for-Beginners Task7：夏普比率与 Beta 学习笔记
 
-日期：2026-07-23
+日期：2026-07-24
 
 ## 1. 今天学习的 Task
 
